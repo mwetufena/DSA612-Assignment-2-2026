@@ -1,0 +1,236 @@
+name: mjolnir-food-delivery
+
+services:
+
+  # ============== Infrastructure ==============
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep -q 'Mode:'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${PG_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-12345}
+      POSTGRES_DB: postgres
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_SUPERUSER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./infra/kafka/topics.sh:/tmp/topics.sh:ro
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        apt-get update -qq && apt-get install -y -qq netcat-openbsd >/dev/null 2>&1 || true
+        bash /tmp/topics.sh
+    restart: "no"
+
+  # ============== Microservices ==============
+  customer:
+    build: { context: ./services/customer }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_CUSTOMER}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8081:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  restaurant:
+    build: { context: ./services/restaurant }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_RESTAURANT}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8082:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  order:
+    build: { context: ./services/order }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_ORDER}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+      CUSTOMER_URL: http://customer:8090
+      RESTAURANT_URL: http://restaurant:8090
+      PAYMENT_URL: http://payment:8090
+      DELIVERY_URL: http://delivery:8090
+    ports: [ "8083:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  payment:
+    build: { context: ./services/payment }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_PAYMENT}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8084:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  delivery:
+    build: { context: ./services/delivery }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_DELIVERY}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8085:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  notification:
+    build: { context: ./services/notification }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_NOTIFICATION}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8086:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  admin:
+    build: { context: ./services/admin }
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DB_HOST: postgres
+      DB_NAME: ${DB_ADMIN}
+      DB_USER: ${PG_SUPERUSER}
+      DB_PASSWORD: ${PG_PASSWORD}
+      SERVICE_PORT: "8090"
+    ports: [ "8087:8090" ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  # ============== GUI ==============
+  gui:
+    image: nginx:1.27-alpine
+    depends_on:
+      - customer
+      - restaurant
+      - order
+      - payment
+      - delivery
+      - notification
+      - admin
+    volumes:
+      - ./gui:/usr/share/nginx/html:ro
+      - ./gui/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${GUI_PORT:-8080}:80"
+
+volumes:
+  pg_data:
+
+
+
+
+
+  # http://localhost:8080 -> GUI

@@ -1,0 +1,44 @@
+# Local environment and secrets (keep the checked-in template)
+.env
+.env.*
+!.env.example
+
+# Ballerina build output and generated artifacts
+**/target/
+
+# Java / build output
+*.class
+*.jar
+/build/
+/dist/
+/coverage/
+
+# JavaScript dependencies (if a frontend build is added later)
+node_modules/
+
+# Logs, temporary files, and local database files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.sqlite
+*.sqlite3
+*.db
+
+# Local Docker Compose overrides
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Editor settings (allow shareable VS Code project configuration)
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
