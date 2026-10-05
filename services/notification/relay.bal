@@ -1,3 +1,5 @@
+// Outbox relay for the Payment service.
+
 import ballerina/lang.runtime;
 import ballerina/log;
 import ballerina/sql;
@@ -15,7 +17,7 @@ class OutboxRelayJob {
         OutboxRow[]|error rows = fetchUnpublished(RELAY_BATCH);
         if rows is error { return; }
         if rows.length() == 0 { return; }
-        log:printInfo("notification outbox publishing", count = rows.length());
+        log:printInfo("payment outbox publishing", count = rows.length());
         foreach OutboxRow row in rows {
             json|error envelope = row.payload.fromJsonString();
             if envelope is error { continue; }
@@ -25,9 +27,12 @@ class OutboxRelayJob {
                 "schemaVersion": row.schemaVersion.toString()
             };
             kafka:AnydataProducerRecord r = {
-                topic: row.topic, key: row.eventId, value: envelope, headers: hdrs
+                topic: row.topic,
+                key: row.eventId,
+                value: envelope,
+                headers: hdrs
             };
-            error? sent = notificationProducer->send(r);
+            error? sent = paymentProducer->send(r);
             if sent is error { continue; }
             sql:Error? marked = markPublished(row.id);
         }
