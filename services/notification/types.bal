@@ -1,23 +1,25 @@
-public type Channel "EMAIL"|"SMS"|"PUSH"|"INAPP";
+// Types for the Payment service.
 
-public type Notification record {|
+public type PaymentMethod "CARD"|"WALLET"|"CASH";
+
+public type Payment record {|
     string id;
-    string recipientId;
-    Channel channel;
-    string? subject;
-    string body;
+    string orderId;
+    string customerId;
+    int amountCents;
+    PaymentMethod method;
     string status;
-    string? relatedEventId;
-    string? correlationId;
+    string? transactionRef;
+    string? failureReason;
     string createdAt;
-    string? sentAt;
+    string? completedAt;
 |};
 
-public type CreateNotificationRequest record {|
-    string recipientId;
-    Channel channel;
-    string? subject?;
-    string body;
+public type CreatePaymentRequest record {|
+    string orderId;
+    string customerId;
+    int amountCents;
+    PaymentMethod method;
 |};
 
 public type ApiError record {| string code; string message; |};
@@ -41,4 +43,10 @@ public type EventEnvelope record {|
     string topic;
     string occurredAt;
     json payload;
+|};
+
+public type ProcessedEvent record {|
+    string eventId;
+    string topic;
+    string consumerGroup;
 |};
