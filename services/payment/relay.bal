@@ -39,6 +39,7 @@ class OutboxRelayJob {
     }
 }
 
+
 public function main() returns error? {
     _ = check task:scheduleJobRecurByFrequency(new OutboxRelayJob(), RELAY_INTERVAL_SECONDS);
     while true { runtime:sleep(60); }
