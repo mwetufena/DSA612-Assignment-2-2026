@@ -1,4 +1,4 @@
-// Types for the Payment service.
+
 
 public type PaymentMethod "CARD"|"WALLET"|"CASH";
 
