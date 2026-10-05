@@ -1,5 +1,4 @@
 
-
 public type PaymentMethod "CARD"|"WALLET"|"CASH";
 
 public type Payment record {|
