@@ -1,4 +1,3 @@
-// Outbox relay for the Payment service.
 
 import ballerina/lang.runtime;
 import ballerina/log;
