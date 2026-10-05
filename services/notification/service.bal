@@ -1,4 +1,3 @@
-// Payment service: simulated processor + outbox + circuit breaker.
 
 import ballerina/http;
 import ballerina/random;
